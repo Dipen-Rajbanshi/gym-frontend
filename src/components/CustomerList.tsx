@@ -1,13 +1,17 @@
 import { useEffect, useRef, useState } from "react";
 import { AgGridReact } from "ag-grid-react";
 import { AllCommunityModule, ModuleRegistry, type ColDef } from "ag-grid-community";
+import Paper from "@mui/material/Paper";
+import Typography from "@mui/material/Typography";
+import Alert from "@mui/material/Alert";
+import LinearProgress from "@mui/material/LinearProgress";
 import { type Customer, API_URL } from "../types";
 import { extractList } from "../utils";
-import SortSelect from "./SortSelect";
+import ListToolbar, { type SortOption } from "./ListToolbar";
 
 ModuleRegistry.registerModules([AllCommunityModule]);
 
-const sortOptions = [
+const sortOptions: SortOption[] = [
   { value: "firstname:asc", label: "First name (A-Z)" },
   { value: "firstname:desc", label: "First name (Z-A)" },
   { value: "lastname:asc", label: "Last name (A-Z)" },
@@ -21,15 +25,17 @@ export default function CustomerList() {
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [search, setSearch] = useState("");
   const [sortValue, setSortValue] = useState("");
+  const [shownCount, setShownCount] = useState(0);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
   const columnDefs: ColDef<Customer>[] = [
     { colId: "firstname", field: "firstname", headerName: "First name" },
     { colId: "lastname", field: "lastname", headerName: "Last name" },
     { colId: "streetaddress", field: "streetaddress", headerName: "Address" },
-    { colId: "postcode", field: "postcode", headerName: "Postcode" },
+    { colId: "postcode", field: "postcode", headerName: "Postcode", maxWidth: 130 },
     { colId: "city", field: "city", headerName: "City" },
-    { colId: "email", field: "email", headerName: "Email" },
+    { colId: "email", field: "email", headerName: "Email", minWidth: 200 },
     { colId: "phone", field: "phone", headerName: "Phone" },
   ];
 
@@ -39,11 +45,9 @@ export default function CustomerList() {
         if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
         return res.json();
       })
-      .then((data) => {
-        console.log("customers response:", data);
-        setCustomers(extractList<Customer>(data, "customers"));
-      })
-      .catch((err) => setError("Could not load customers: " + err.message));
+      .then((data) => setCustomers(extractList<Customer>(data, "customers")))
+      .catch((err) => setError("Could not load customers: " + err.message))
+      .finally(() => setLoading(false));
   }, []);
 
   // Dropdown -> grid
@@ -64,38 +68,56 @@ export default function CustomerList() {
 
   return (
     <>
-      <h2>Customers</h2>
-      <div style={{ display: "flex", gap: 12, marginBottom: 12 }}>
-        <input
-          type="text"
-          placeholder="Search customers..."
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          style={{ padding: 8, width: 260 }}
-        />
-        <SortSelect options={sortOptions} value={sortValue} onChange={handleSortChange} />
-      </div>
+      <Typography variant="h5" sx={{ fontWeight: 500 }}>
+        Customers
+      </Typography>
+      <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+        Search, sort and browse all gym customers.
+      </Typography>
 
-      {error && <p style={{ color: "red" }}>{error}</p>}
-
-      <div style={{ height: 500, width: "100%" }}>
-        <AgGridReact
-          ref={gridRef}
-          rowData={customers}
-          columnDefs={columnDefs}
-          defaultColDef={{
-            sortable: true,
-            unSortIcon: true, // always show the sort arrows
-            filter: true,
-            flex: 1,
-            minWidth: 120,
-          }}
-          onSortChanged={handleSortChanged}
-          quickFilterText={search}
-          pagination={true}
-          paginationPageSize={10}
+      <Paper elevation={1} sx={{ p: 2 }}>
+        <ListToolbar
+          searchPlaceholder="Search customers..."
+          search={search}
+          onSearchChange={setSearch}
+          sortOptions={sortOptions}
+          sortValue={sortValue}
+          onSortChange={handleSortChange}
+          shownCount={shownCount}
+          totalCount={customers.length}
         />
-      </div>
+
+        {error && (
+          <Alert severity="error" sx={{ mb: 2 }}>
+            {error}
+          </Alert>
+        )}
+
+        <div style={{ height: 4, marginBottom: 8 }}>
+          {loading && <LinearProgress />}
+        </div>
+
+        <div className="grid-wrapper">
+          <AgGridReact
+            ref={gridRef}
+            rowData={customers}
+            columnDefs={columnDefs}
+            defaultColDef={{
+              sortable: true,
+              unSortIcon: true,
+              filter: true,
+              flex: 1,
+              minWidth: 120,
+            }}
+            onSortChanged={handleSortChanged}
+            onModelUpdated={(e) => setShownCount(e.api.getDisplayedRowCount())}
+            quickFilterText={search}
+            pagination={true}
+            paginationPageSize={10}
+            paginationPageSizeSelector={[10, 20, 50]}
+          />
+        </div>
+      </Paper>
     </>
   );
 }
