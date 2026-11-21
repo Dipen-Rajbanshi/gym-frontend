@@ -1,3 +1,4 @@
+
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AgGridReact } from "ag-grid-react";
 import {
@@ -6,6 +7,7 @@ import {
   type ColDef,
   type ICellRendererParams,
 } from "ag-grid-community";
+
 import Paper from "@mui/material/Paper";
 import Typography from "@mui/material/Typography";
 import Alert from "@mui/material/Alert";
@@ -13,13 +15,17 @@ import Button from "@mui/material/Button";
 import IconButton from "@mui/material/IconButton";
 import Tooltip from "@mui/material/Tooltip";
 import LinearProgress from "@mui/material/LinearProgress";
+
 import AddIcon from "@mui/icons-material/Add";
 import EditIcon from "@mui/icons-material/Edit";
 import DeleteIcon from "@mui/icons-material/Delete";
 import EventAvailableIcon from "@mui/icons-material/EventAvailable";
+import DownloadIcon from "@mui/icons-material/Download";
+
 import { type Customer, type CustomerInput, API_URL } from "../types";
 import { extractList, getCustomerId } from "../utils";
 import { gridTheme } from "../gridTheme";
+
 import ListToolbar, { type SortOption } from "./ListToolbar";
 import CustomerFormDialog from "./CustomerFormDialog";
 import AddTrainingDialog, { type TrainingInput } from "./AddTrainingDialog";
@@ -41,6 +47,7 @@ const JSON_HEADERS = { "Content-Type": "application/json" };
 
 export default function CustomerList() {
   const gridRef = useRef<AgGridReact<Customer>>(null);
+
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [search, setSearch] = useState("");
   const [sortValue, setSortValue] = useState("");
@@ -55,15 +62,46 @@ export default function CustomerList() {
   const [deleting, setDeleting] = useState<Customer | null>(null);
   const [toast, setToast] = useState<ToastState>(null);
 
+  // Customer table columns
   const columnDefs = useMemo<ColDef<Customer>[]>(
     () => [
-      { colId: "firstname", field: "firstname", headerName: "First name" },
-      { colId: "lastname", field: "lastname", headerName: "Last name" },
-      { colId: "streetaddress", field: "streetaddress", headerName: "Address" },
-      { colId: "postcode", field: "postcode", headerName: "Postcode", maxWidth: 130 },
-      { colId: "city", field: "city", headerName: "City" },
-      { colId: "email", field: "email", headerName: "Email", minWidth: 200 },
-      { colId: "phone", field: "phone", headerName: "Phone" },
+      {
+        colId: "firstname",
+        field: "firstname",
+        headerName: "First name",
+      },
+      {
+        colId: "lastname",
+        field: "lastname",
+        headerName: "Last name",
+      },
+      {
+        colId: "streetaddress",
+        field: "streetaddress",
+        headerName: "Address",
+      },
+      {
+        colId: "postcode",
+        field: "postcode",
+        headerName: "Postcode",
+        maxWidth: 130,
+      },
+      {
+        colId: "city",
+        field: "city",
+        headerName: "City",
+      },
+      {
+        colId: "email",
+        field: "email",
+        headerName: "Email",
+        minWidth: 200,
+      },
+      {
+        colId: "phone",
+        field: "phone",
+        headerName: "Phone",
+      },
       {
         colId: "actions",
         headerName: "Actions",
@@ -75,7 +113,9 @@ export default function CustomerList() {
         width: 160,
         cellRenderer: (p: ICellRendererParams<Customer>) => {
           const c = p.data;
+
           if (!c) return null;
+
           return (
             <div className="row-actions">
               <Tooltip title="Add training">
@@ -88,6 +128,7 @@ export default function CustomerList() {
                   <EventAvailableIcon fontSize="small" />
                 </IconButton>
               </Tooltip>
+
               <Tooltip title="Edit customer">
                 <IconButton
                   size="small"
@@ -100,6 +141,7 @@ export default function CustomerList() {
                   <EditIcon fontSize="small" />
                 </IconButton>
               </Tooltip>
+
               <Tooltip title="Delete customer">
                 <IconButton
                   size="small"
@@ -118,39 +160,125 @@ export default function CustomerList() {
     []
   );
 
+  // Load customers from the backend
   const loadCustomers = useCallback(() => {
     setLoading(true);
     setError("");
+
     fetch(`${API_URL}/customers`)
       .then((res) => {
-        if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
+        if (!res.ok) {
+          throw new Error(`${res.status} ${res.statusText}`);
+        }
+
         return res.json();
       })
-      .then((data) => setCustomers(extractList<Customer>(data, "customers")))
-      .catch((err) => setError("Could not load customers: " + err.message))
-      .finally(() => setLoading(false));
+      .then((data) => {
+        setCustomers(extractList<Customer>(data, "customers"));
+      })
+      .catch((err) => {
+        setError("Could not load customers: " + err.message);
+      })
+      .finally(() => {
+        setLoading(false);
+      });
   }, []);
 
   useEffect(() => {
     loadCustomers();
   }, [loadCustomers]);
 
-  // ---- Sorting ----
+  // Export all customers to CSV
+  const exportCustomersToCSV = () => {
+    if (customers.length === 0) {
+      setToast({
+        message: "No customers available to export",
+        severity: "error",
+      });
+      return;
+    }
+
+    // Only include customer information.
+    // The Actions column is deliberately excluded.
+    const headers = [
+      "First Name",
+      "Last Name",
+      "Address",
+      "Postcode",
+      "City",
+      "Email",
+      "Phone",
+    ];
+
+    const rows = customers.map((customer) => [
+      customer.firstname,
+      customer.lastname,
+      customer.streetaddress,
+      customer.postcode,
+      customer.city,
+      customer.email,
+      customer.phone,
+    ]);
+
+    // Escape commas, quotation marks and special characters
+    const escapeCSV = (value: string | null | undefined) => {
+      const safeValue = String(value ?? "");
+      return `"${safeValue.replace(/"/g, '""')}"`;
+    };
+
+    const csvContent = [
+      headers.map(escapeCSV).join(","),
+      ...rows.map((row) => row.map(escapeCSV).join(",")),
+    ].join("\r\n");
+
+    // Create a downloadable CSV file
+    const blob = new Blob(["\uFEFF" + csvContent], {
+      type: "text/csv;charset=utf-8;",
+    });
+
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+
+    link.href = url;
+    link.download = "gym-customers.csv";
+
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+
+    URL.revokeObjectURL(url);
+
+    setToast({
+      message: "Customers exported successfully",
+      severity: "success",
+    });
+  };
+
+  // Sorting
   const handleSortChange = (value: string) => {
     setSortValue(value);
+
     const [colId, sort] = value.split(":");
+
     gridRef.current?.api.applyColumnState({
-      state: value ? [{ colId, sort: sort as "asc" | "desc" }] : [],
+      state: value
+        ? [{ colId, sort: sort as "asc" | "desc" }]
+        : [],
       defaultState: { sort: null },
     });
   };
 
   const handleSortChanged = () => {
-    const sorted = gridRef.current?.api.getColumnState().find((c) => c.sort);
-    setSortValue(sorted ? `${sorted.colId}:${sorted.sort}` : "");
+    const sorted = gridRef.current?.api
+      .getColumnState()
+      .find((c) => c.sort);
+
+    setSortValue(
+      sorted ? `${sorted.colId}:${sorted.sort}` : ""
+    );
   };
 
-  // ---- Add / edit customer ----
+  // Add or edit customer
   const closeForm = () => {
     setFormOpen(false);
     setEditing(null);
@@ -158,54 +286,81 @@ export default function CustomerList() {
 
   const saveCustomer = async (data: CustomerInput) => {
     const isEdit = editing !== null;
+
     const url = isEdit
       ? `${API_URL}/customers/${getCustomerId(editing)}`
       : `${API_URL}/customers`;
+
     try {
       const res = await fetch(url, {
         method: isEdit ? "PUT" : "POST",
         headers: JSON_HEADERS,
         body: JSON.stringify(data),
       });
-      if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
+
+      if (!res.ok) {
+        throw new Error(`${res.status} ${res.statusText}`);
+      }
+
       closeForm();
+
       setToast({
         message: isEdit ? "Customer updated" : "Customer added",
         severity: "success",
       });
+
       loadCustomers();
     } catch (err) {
       setToast({
-        message: "Could not save customer: " + (err as Error).message,
+        message:
+          "Could not save customer: " +
+          (err as Error).message,
         severity: "error",
       });
     }
   };
 
-  // ---- Delete customer ----
+  // Delete customer
   const confirmDelete = async () => {
     if (!deleting) return;
+
     const customer = deleting;
     setDeleting(null);
+
     try {
-      const res = await fetch(`${API_URL}/customers/${getCustomerId(customer)}`, {
-        method: "DELETE",
+      const res = await fetch(
+        `${API_URL}/customers/${getCustomerId(customer)}`,
+        {
+          method: "DELETE",
+        }
+      );
+
+      if (!res.ok) {
+        throw new Error(`${res.status} ${res.statusText}`);
+      }
+
+      setToast({
+        message: "Customer deleted",
+        severity: "success",
       });
-      if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
-      setToast({ message: "Customer deleted", severity: "success" });
+
       loadCustomers();
     } catch (err) {
       setToast({
-        message: "Could not delete customer: " + (err as Error).message,
+        message:
+          "Could not delete customer: " +
+          (err as Error).message,
         severity: "error",
       });
     }
   };
 
-  // ---- Add training ----
+  // Add training for a customer
   const saveTraining = async (data: TrainingInput) => {
     if (!trainingFor) return;
+
     const customer = trainingFor;
+
     try {
       const res = await fetch(`${API_URL}/trainings`, {
         method: "POST",
@@ -215,15 +370,22 @@ export default function CustomerList() {
           customer: `${API_URL}/customers/${getCustomerId(customer)}`,
         }),
       });
-      if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
+
+      if (!res.ok) {
+        throw new Error(`${res.status} ${res.statusText}`);
+      }
+
       setTrainingFor(null);
+
       setToast({
         message: `Training added for ${customer.firstname} ${customer.lastname}`,
         severity: "success",
       });
     } catch (err) {
       setToast({
-        message: "Could not add training: " + (err as Error).message,
+        message:
+          "Could not add training: " +
+          (err as Error).message,
         severity: "error",
       });
     }
@@ -235,6 +397,7 @@ export default function CustomerList() {
         <Typography variant="h5" sx={{ fontWeight: 500 }}>
           Customers
         </Typography>
+
         <Typography variant="body2" color="text.secondary">
           Search, sort and manage all gym customers.
         </Typography>
@@ -251,16 +414,26 @@ export default function CustomerList() {
           shownCount={shownCount}
           totalCount={customers.length}
           action={
-            <Button
-              variant="contained"
-              startIcon={<AddIcon />}
-              onClick={() => {
-                setEditing(null);
-                setFormOpen(true);
-              }}
-            >
-              Add customer
-            </Button>
+            <>
+              <Button
+                variant="outlined"
+                startIcon={<DownloadIcon />}
+                onClick={exportCustomersToCSV}
+              >
+                Export CSV
+              </Button>
+
+              <Button
+                variant="contained"
+                startIcon={<AddIcon />}
+                onClick={() => {
+                  setEditing(null);
+                  setFormOpen(true);
+                }}
+              >
+                Add customer
+              </Button>
+            </>
           }
         />
 
@@ -269,7 +442,11 @@ export default function CustomerList() {
             severity="error"
             sx={{ mb: 2 }}
             action={
-              <Button color="inherit" size="small" onClick={loadCustomers}>
+              <Button
+                color="inherit"
+                size="small"
+                onClick={loadCustomers}
+              >
                 Retry
               </Button>
             }
@@ -298,7 +475,9 @@ export default function CustomerList() {
               minWidth: 120,
             }}
             onSortChanged={handleSortChanged}
-            onModelUpdated={(e) => setShownCount(e.api.getDisplayedRowCount())}
+            onModelUpdated={(e) =>
+              setShownCount(e.api.getDisplayedRowCount())
+            }
             quickFilterText={search}
             pagination={true}
             paginationPageSize={10}
@@ -335,7 +514,10 @@ export default function CustomerList() {
         onCancel={() => setDeleting(null)}
       />
 
-      <Toast toast={toast} onClose={() => setToast(null)} />
+      <Toast
+        toast={toast}
+        onClose={() => setToast(null)}
+      />
     </>
   );
 }
