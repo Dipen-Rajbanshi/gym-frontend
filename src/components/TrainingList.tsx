@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AgGridReact } from "ag-grid-react";
 import {
   AllCommunityModule,
@@ -12,11 +12,16 @@ import Typography from "@mui/material/Typography";
 import Alert from "@mui/material/Alert";
 import Button from "@mui/material/Button";
 import Chip from "@mui/material/Chip";
+import IconButton from "@mui/material/IconButton";
+import Tooltip from "@mui/material/Tooltip";
 import LinearProgress from "@mui/material/LinearProgress";
+import DeleteIcon from "@mui/icons-material/Delete";
 import { type Training, API_URL } from "../types";
 import { extractList } from "../utils";
 import { gridTheme } from "../gridTheme";
 import ListToolbar, { type SortOption } from "./ListToolbar";
+import ConfirmDialog from "./ConfirmDialog";
+import Toast, { type ToastState } from "./Toast";
 
 ModuleRegistry.registerModules([AllCommunityModule]);
 
@@ -42,39 +47,72 @@ export default function TrainingList() {
   const [shownCount, setShownCount] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [deleting, setDeleting] = useState<Training | null>(null);
+  const [toast, setToast] = useState<ToastState>(null);
 
-  const columnDefs: ColDef<Training>[] = [
-    {
-      colId: "date",
-      field: "date",
-      headerName: "Date",
-      valueFormatter: (p) => formatDate(p.value),
-      getQuickFilterText: (p) => formatDate(p.value),
-    },
-    {
-      colId: "duration",
-      field: "duration",
-      headerName: "Duration",
-      valueFormatter: (p) => (p.value != null ? `${p.value} min` : ""),
-    },
-    {
-      colId: "activity",
-      field: "activity",
-      headerName: "Activity",
-      cellRenderer: (p: ICellRendererParams<Training>) =>
-        p.value ? (
-          <Chip label={p.value} size="small" color="primary" variant="outlined" />
-        ) : null,
-    },
-    {
-      colId: "customer",
-      headerName: "Customer",
-      valueGetter: (p) =>
-        p.data?.customer
-          ? `${p.data.customer.firstname} ${p.data.customer.lastname}`
-          : "",
-    },
-  ];
+  const columnDefs = useMemo<ColDef<Training>[]>(
+    () => [
+      {
+        colId: "date",
+        field: "date",
+        headerName: "Date",
+        valueFormatter: (p) => formatDate(p.value),
+        getQuickFilterText: (p) => formatDate(p.value),
+      },
+      {
+        colId: "duration",
+        field: "duration",
+        headerName: "Duration",
+        valueFormatter: (p) => (p.value != null ? `${p.value} min` : ""),
+      },
+      {
+        colId: "activity",
+        field: "activity",
+        headerName: "Activity",
+        cellRenderer: (p: ICellRendererParams<Training>) =>
+          p.value ? (
+            <Chip label={p.value} size="small" color="primary" variant="outlined" />
+          ) : null,
+      },
+      {
+        colId: "customer",
+        headerName: "Customer",
+        valueGetter: (p) =>
+          p.data?.customer
+            ? `${p.data.customer.firstname} ${p.data.customer.lastname}`
+            : "",
+      },
+      {
+        colId: "actions",
+        headerName: "Actions",
+        sortable: false,
+        filter: false,
+        unSortIcon: false,
+        resizable: false,
+        flex: 0,
+        width: 110,
+        cellRenderer: (p: ICellRendererParams<Training>) => {
+          const t = p.data;
+          if (!t) return null;
+          return (
+            <div className="row-actions">
+              <Tooltip title="Delete training">
+                <IconButton
+                  size="small"
+                  color="error"
+                  aria-label="Delete training"
+                  onClick={() => setDeleting(t)}
+                >
+                  <DeleteIcon fontSize="small" />
+                </IconButton>
+              </Tooltip>
+            </div>
+          );
+        },
+      },
+    ],
+    []
+  );
 
   const loadTrainings = useCallback(() => {
     setLoading(true);
@@ -84,10 +122,7 @@ export default function TrainingList() {
         if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
         return res.json();
       })
-      .then((data) => {
-        console.log("trainings response:", data);
-        setTrainings(extractList<Training>(data, "trainings"));
-      })
+      .then((data) => setTrainings(extractList<Training>(data, "trainings")))
       .catch((err) => setError("Could not load trainings: " + err.message))
       .finally(() => setLoading(false));
   }, []);
@@ -108,6 +143,25 @@ export default function TrainingList() {
   const handleSortChanged = () => {
     const sorted = gridRef.current?.api.getColumnState().find((c) => c.sort);
     setSortValue(sorted ? `${sorted.colId}:${sorted.sort}` : "");
+  };
+
+  const confirmDelete = async () => {
+    if (!deleting) return;
+    const training = deleting;
+    setDeleting(null);
+    try {
+      const res = await fetch(`${API_URL}/trainings/${training.id}`, {
+        method: "DELETE",
+      });
+      if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
+      setToast({ message: "Training deleted", severity: "success" });
+      loadTrainings();
+    } catch (err) {
+      setToast({
+        message: "Could not delete training: " + (err as Error).message,
+        severity: "error",
+      });
+    }
   };
 
   return (
@@ -149,7 +203,7 @@ export default function TrainingList() {
 
         {!loading && !error && trainings.length === 0 && (
           <Alert severity="info" sx={{ mb: 2 }}>
-            No trainings found. The server returned an empty list.
+            No trainings found. Add one from the Customers page.
           </Alert>
         )}
 
@@ -181,6 +235,20 @@ export default function TrainingList() {
           />
         </div>
       </Paper>
+
+      <ConfirmDialog
+        open={deleting !== null}
+        title="Delete training?"
+        message={
+          deleting
+            ? `Are you sure you want to delete the ${deleting.activity} session of ${deleting.customer?.firstname ?? ""} ${deleting.customer?.lastname ?? ""} on ${formatDate(deleting.date)}? This cannot be undone.`
+            : ""
+        }
+        onConfirm={confirmDelete}
+        onCancel={() => setDeleting(null)}
+      />
+
+      <Toast toast={toast} onClose={() => setToast(null)} />
     </>
   );
 }

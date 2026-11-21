@@ -6,7 +6,11 @@ export type Customer = {
   city: string;
   email: string;
   phone: string;
+  _links?: { self: { href: string } };
 };
+
+// What we send to the API when creating or editing a customer
+export type CustomerInput = Omit<Customer, "_links">;
 
 export type Training = {
   id: number;

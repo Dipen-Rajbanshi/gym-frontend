@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import TextField from "@mui/material/TextField";
 import InputAdornment from "@mui/material/InputAdornment";
 import IconButton from "@mui/material/IconButton";
@@ -17,6 +18,7 @@ type Props = {
   onSortChange: (value: string) => void;
   shownCount: number;
   totalCount: number;
+  action?: ReactNode;
 };
 
 export default function ListToolbar({
@@ -28,6 +30,7 @@ export default function ListToolbar({
   onSortChange,
   shownCount,
   totalCount,
+  action,
 }: Props) {
   return (
     <div className="toolbar">
@@ -86,6 +89,8 @@ export default function ListToolbar({
       <Typography variant="body2" color="text.secondary">
         Showing {shownCount} of {totalCount}
       </Typography>
+
+      {action}
     </div>
   );
 }
