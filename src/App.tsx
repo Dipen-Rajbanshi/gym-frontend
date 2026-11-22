@@ -16,10 +16,12 @@ import FitnessCenterIcon from "@mui/icons-material/FitnessCenter";
 import PeopleIcon from "@mui/icons-material/People";
 import EventIcon from "@mui/icons-material/Event";
 import CalendarMonthIcon from "@mui/icons-material/CalendarMonth";
+import BarChartIcon from "@mui/icons-material/BarChart";
 
 import CustomerList from "./components/CustomerList";
 import TrainingList from "./components/TrainingList";
 import CalendarPage from "./components/CalendarPage";
+import StatisticsPage from "./components/StatisticsPage";
 
 export default function App() {
   return (
@@ -65,6 +67,15 @@ export default function App() {
           >
             Calendar
           </Button>
+
+          <Button
+            component={NavLink}
+            to="/statistics"
+            className="nav-link"
+            startIcon={<BarChartIcon />}
+          >
+            Statistics
+          </Button>
         </Toolbar>
       </AppBar>
 
@@ -88,6 +99,11 @@ export default function App() {
           <Route
             path="/calendar"
             element={<CalendarPage />}
+          />
+
+          <Route
+            path="/statistics"
+            element={<StatisticsPage />}
           />
         </Routes>
       </main>
